@@ -1,0 +1,17 @@
+#PBS -lselect=1:ncpus=1:mem=1gb
+#PBS -lwalltime=24:0:0
+
+# Load modules for any applications
+
+module load lammps
+
+# Change to the submission directory
+
+cd $PBS_O_WORKDIR
+
+# Run program
+
+lmp -in main.in
+
+mkdir $WORK/PhD-Sims/Trial/$PBS_JOBID
+cp * $WORK/PhD-Sims/Trial/$PBS_JOBID

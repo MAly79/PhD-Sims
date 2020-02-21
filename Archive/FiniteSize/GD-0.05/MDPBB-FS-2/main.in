@@ -1,0 +1,40 @@
+#--- Brush Variables---#
+variable      f      equal  2
+variable      M      equal  $(v_f * 20)                 # The number of polymer chains on each brush
+variable      N      string 30                 # The number of beads per chain
+variable      xhi    equal  $(sqrt(v_f) * 20)                 # The width of the polymer Brush
+variable      yhi    equal  $(sqrt(v_f) * 20)                 # The length of the polymer Brush
+variable      wthick equal  3                  # The thickness of the walls wthick=1,2,3,4 gives 2,3,4,6 layers respectively
+
+#--- Simulation Variables ---#
+variable       Temp      index 1        #0.8 1 1.68                 #[Grest96]
+variable       Tstep     equal 0.005                       # Timestep in Tau (default = 0.005)
+variable       Nequil    equal 300000                       # Number of timesteps to equilibrate
+variable       Ncomp     equal 700000                     # Number of timesteps to compress - until no more occilation of walls
+variable       Nshear    equal 4000000      #2000000                      # Number of timesteps to shear - use approx 4ns for 10m/s
+variable       Nthermo   equal 1000                        # Number of timesteps between thermo data prints
+variable       Ndump_e   equal 10000
+variable       Ndump_c   equal 10000                      # Number of timesteps per dump file (compression)
+variable       Ndump_s   equal 10000                       # Number of timesteps per dump file (shear)
+variable       Wall_v    index 0.5   #0.001 0.01 0.1 0.2 0.4 0.6 0.8 1 1.2 1.4 1.6 1.8 2   # 0.005 0.05 0.1 0.5 1.5 0.001 0.003 0.2 0.0002 2                      # Wall velocity (A/fs) - equal to 10 m/s
+variable       Pcomp     index 1 0.5 2 0.05 4 8
+
+include        MDPBB.in
+print        "Created a Polymer Brush Bilayer with Surface Coverage = $(v_M/(lx*ly))"
+
+label          sim
+
+include        ecs.in
+shell          python post.py
+shell          mkdir $(v_Pcomp)_P
+shell          cp -f *.csv $(v_Pcomp)_P
+shell          cp -f *.jpg $(v_Pcomp)_P
+shell          cp -f log.lammps $(v_Pcomp)_P
+shell          cp -f fc_ave.dump $(v_Pcomp)_P
+shell          cp -f ecs.rst $(v_Pcomp)_P
+shell          pwd
+#print         "Temp = $(v_Temp)"
+log           log.lammps
+next          Pcomp
+jump          main.in sim
+clear

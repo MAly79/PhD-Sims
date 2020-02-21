@@ -1,0 +1,75 @@
+LAMMPS (7 Aug 2019)
+# FCC Wall minimisation
+
+dimension     3
+boundary      p p p
+units         lj
+atom_style    bond
+
+
+region        sbox block 0 30 0 40 0 30
+create_box    1 sbox bond/types 1 extra/bond/per/atom 12
+Created orthogonal box = (0 0 0) to (30 40 30)
+  2 by 4 by 4 MPI processor grid
+
+pair_style	  lj/cut 1.122462         # LJ potential with rc=2^1/6
+pair_coeff	  * * 1.0 1.0
+
+bond_style    harmonic
+bond_coeff    1 300.0 0.5 #$(1.5874 * sqrt(2)/2)
+
+region        bwall block 0 30 0 40 0 10
+region        twall block 0 30 0 40 20 30
+lattice       fcc 1
+Lattice spacing in x,y,z = 1.5874 1.5874 1.5874
+create_atoms  1 region bwall
+Created 12597 atoms
+  create_atoms CPU = 0.00272393 secs
+create_atoms  1 region twall
+Created 11628 atoms
+  create_atoms CPU = 0.00178003 secs
+group         bwall region bwall
+12597 atoms in group bwall
+group         twall region twall
+11628 atoms in group twall
+
+mass 1 1.0
+
+#neigh_modify exclude type 1 1
+create_bonds  many bwall bwall 1 0.5 1.2
+Neighbor list info ...
+  update every 1 steps, delay 10 steps, check yes
+  max neighbors/atom: 2000, page size: 100000
+  master list distance cutoff = 1.42246
+  ghost atom cutoff = 1.42246
+  binsize = 0.711231, bins = 43 57 43
+  2 neighbor lists, perpetual/occasional/extra = 1 1 0
+  (1) command create_bonds, occasional
+      attributes: full, newton on
+      pair build: full/bin
+      stencil: full/bin/3d
+      bin: standard
+  (2) pair lj/cut, perpetual
+      attributes: half, newton on
+      pair build: half/bin/newton
+      stencil: half/bin/3d/newton
+      bin: standard
+Added 71668 bonds, new total = 71668
+  12 = max # of 1-2 neighbors
+  132 = max # of 1-3 neighbors
+  1584 = max # of 1-4 neighbors
+  155 = max # of special neighbors
+  special bonds CPU = 0.0886011 secs
+create_bonds  many twall twall 1 0.5 1.2
+Added 65854 bonds, new total = 137522
+  12 = max # of 1-2 neighbors
+  132 = max # of 1-3 neighbors
+  1584 = max # of 1-4 neighbors
+  155 = max # of special neighbors
+  special bonds CPU = 0.087755 secs
+
+
+dump 1 all custom 100 dump.random.bin id x y z vx vy vz
+dump 2 all image 500 image.*.jpg type type
+ERROR: Support for writing images in JPEG format not included (../dump_image.cpp:85)
+Last command: dump 2 all image 500 image.*.jpg type type

@@ -1,0 +1,8 @@
+#PBS -l walltime=00:30:00
+#PBS -l select=1:ncpus=1:mem=2gb
+
+module load hellocx1
+
+cd $PBS_0_WORKDIR
+sleep 60
+hellocx1.py > mylog

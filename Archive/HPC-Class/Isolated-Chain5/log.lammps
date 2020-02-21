@@ -1,0 +1,62 @@
+LAMMPS (7 Aug 2019)
+# This is an input script that creates a mono disperse polymer brush bilayer
+# A coarse grained bead-spring model is used for the polymers which are end
+# grafted to the surfaces of 2 opposing FCC walls at random sites.
+
+clear
+
+#--- Initialization ---#
+
+dimension     3
+boundary      p p p
+units         lj
+atom_style    bond
+
+
+#--- Moved to main.in ---#
+variable      Temp   equal  1
+variable      M      index  100 # 20 30 50 60             # The number of beads per chain
+variable      xhi    equal  15                # The width of the polymer Brush
+variable      yhi    equal  20                # The length of the polymer Brush
+variable      zhi    equal  $(1.1 * v_M)  # The initial height of the simulation box the value is such that no overlaps occur
+variable      zhi    equal  110.00000000000001421  
+variable      Nequil equal  50000000                       # Number of timesteps to equilibrate
+
+variable       Nfreq   equal 10000                  # Calculate bin averages every this many timesteps
+variable       Nevery  equal 100                    # Use input values every this many timesteps
+variable       Nrepeat equal ${Nfreq}/${Nevery}     # Number of times to use input values
+variable       Nrepeat equal 10000/${Nevery}     
+variable       Nrepeat equal 10000/100     
+print "The number of beads per chain = $(v_M)"
+The number of beads per chain = 100
+
+
+#--- Create the simulation box ---#
+
+region        sbox prism 0 ${xhi} 0 ${yhi} 0 ${zhi} 0.0 0.0 0.0
+region        sbox prism 0 15 0 ${yhi} 0 ${zhi} 0.0 0.0 0.0
+region        sbox prism 0 15 0 20 0 ${zhi} 0.0 0.0 0.0
+region        sbox prism 0 15 0 20 0 110 0.0 0.0 0.0
+create_box    2 sbox bond/types 1 extra/bond/per/atom 2 extra/special/per/atom 2
+Created triclinic box = (0 0 0) to (15 20 110) with tilt (0 0 0)
+  2 by 2 by 8 MPI processor grid
+
+mass          1 1.0                   # Grafted bead
+mass          2 1.0                   # The rest of the beads on the chain
+
+bond_style    fene                         # Finitely extensible linearly elastic bond between neighbouring beads
+bond_coeff    1 30.0 1.5 1.0 1.0      # Values obtained from literature [Grest, Galushcko]
+special_bonds fene                    #
+  0 = max # of 1-2 neighbors
+  5 = max # of special neighbors
+  special bonds CPU = 0.00286794 secs
+pair_style	  lj/cut 1.122462         # LJ potential with rc=2^1/6
+pair_coeff	  * * 1.0 1.0             # LJ potential acts between all atoms
+
+#--- Create and read the molecule file ---#
+python        BSMolf input 1 $M format i file BSMolf.py
+python        BSMolf input 1 100 format i file BSMolf.py
+python        BSMolf invoke    # Call the python function with number of beads to write the mol file
+molecule      bs     bsmol.txt     # Read the Mol file to define the polymer chain
+ERROR on proc 0: Unexpected end of molecule file (../molecule.cpp:414)
+Last command: molecule      bs     bsmol.txt     # Read the Mol file to define the polymer chain

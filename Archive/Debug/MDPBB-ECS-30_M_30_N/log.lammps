@@ -1,0 +1,6 @@
+next          Wall_v
+jump          main.in sim
+clear
+OMP_NUM_THREADS environment is not set. Defaulting to 1 thread. (src/comm.cpp:88)
+  using 1 OpenMP thread(s) per MPI task
+Total wall time: 0:21:12

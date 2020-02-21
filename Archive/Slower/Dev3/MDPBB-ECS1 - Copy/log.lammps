@@ -1,0 +1,3 @@
+next          Wall_vi
+ERROR: Invalid variable 'Wall_vi' in next command (src/variable.cpp:593)
+Last command: next          Wall_vi

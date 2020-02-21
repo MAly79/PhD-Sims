@@ -1,0 +1,4 @@
+LAMMPS (30 Jul 2016)
+print     "This is a LAMMPS Test"
+This is a LAMMPS Test
+Total wall time: 0:00:00

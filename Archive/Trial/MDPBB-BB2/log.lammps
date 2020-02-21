@@ -1,0 +1,163 @@
+LAMMPS (7 Aug 2019)
+#--- Brush Variables---#
+variable      M      equal  30                 # The number of polymer chains on each brush
+variable      N      string 30                 # The number of beads per chain
+variable      xhi    equal  20                 # The width of the polymer Brush
+variable      yhi    equal  20                 # The length of the polymer Brush
+variable      wthick equal  3                  # The thickness of the walls wthick=1,2,3,4 gives 2,3,4,6 layers respectively
+
+#--- Simulation Variables ---#
+variable       Temp      index 1        #0.8 1 1.68                 #[Grest96]
+variable       Tstep     equal 0.005                       # Timestep in Tau (default = 0.005)
+variable       Nequil    equal 300000                       # Number of timesteps to equilibrate
+variable       Ncomp     equal 700000                     # Number of timesteps to compress - until no more occilation of walls
+variable       Nshear    equal 4000000      #2000000                      # Number of timesteps to shear - use approx 4ns for 10m/s
+variable       Nthermo   equal 1000                        # Number of timesteps between thermo data prints
+variable       Ndump_e   equal 10000
+variable       Ndump_c   equal 10000                      # Number of timesteps per dump file (compression)
+variable       Ndump_s   equal 10000                       # Number of timesteps per dump file (shear)
+variable       Wall_v    index 0.001 0.01 0.1 0.2 0.4 0.6 0.8 1 1.2 1.4 1.6 1.8 2   # 0.005 0.05 0.1 0.5 1.5 0.001 0.003 0.2 0.0002 2                      # Wall velocity (A/fs) - equal to 10 m/s
+variable       Pcomp     index 3 #3 4 5 8 10 1.50 0.5 0.05
+
+include        MDPBB.in
+# This is an input script that creates a mono disperse polymer brush bilayer
+# A coarse grained bead-spring model is used for the polymers which are end
+# grafted to the surfaces of 2 opposing FCC walls at random sites.
+
+#--- Initialization ---#
+
+dimension     3
+boundary      p p f
+units         lj
+atom_style    bond
+
+
+#--- Moved to main.in ---#
+#variable      M      equal  50                # The number of polymer chains on each brush
+#variable      N      string 80                # The number of beads per chain
+#variable      xhi    equal  15                # The width of the polymer Brush
+#variable      yhi    equal  20                # The length of the polymer Brush
+#variable      wthick equal  3                 # The thickness of the walls wthick=1,2,3,4 gives 2,3,4,6 layers respectively
+
+variable      zhi    equal  $(1.1 * 2 * v_N + (2 * v_wthick))  # The initial height of the simulation box the value is such that no overlaps occur
+variable      zhi    equal  72  
+variable      z0     equal  $((v_zhi)/4 - (v_N)/30)          # This is the location at which to place the CoM of the molecule
+variable      z0     equal  17          
+
+print "The number of grafted chains = $(v_M)"
+The number of grafted chains = 30
+print "The number of beads per chain = $(v_N)"
+The number of beads per chain = 30
+
+variable      check  equal count(all)         # The number of atoms in the system
+variable      ntwall equal count(twall)       # The number of atoms in the top wall
+variable      nbwall equal count(bwall)       # The number of atoms in the bottom wall
+variable      s equal 234897  #45335              # Seed for the RNG
+
+print "zhi = ${zhi}"
+zhi = 72
+
+#--- Create the simulation box ---#
+
+region        sbox block 0 ${xhi} 0 ${yhi} 0 ${zhi}
+region        sbox block 0 20 0 ${yhi} 0 ${zhi}
+region        sbox block 0 20 0 20 0 ${zhi}
+region        sbox block 0 20 0 20 0 72
+create_box    4 sbox bond/types 3 extra/bond/per/atom 12 extra/special/per/atom 2
+Created orthogonal box = (0 0 0) to (20 20 72)
+  2 by 2 by 8 MPI processor grid
+
+mass          1 2.0                   # Wall atoms that are not grafted
+mass          2 1.0                   # Grafted bead
+mass          3 1.0                   # The rest of the beads on the chain
+mass          4 2.0                   # Wall atoms that the chains are grafted to
+
+bond_style    hybrid fene harmonic    # Finitely extensible linearly elastic bond between neighbouring beads
+#bond_coeff    1 fene 30.0 1.5 0.0 0.0      # Values obtained from literature [Grest, Galushcko]
+bond_coeff    1 fene 30.0 30.0 0.0 0.0
+bond_coeff    2 fene 30.0 30.0 0.0 0.0       # This is the grafting bond between the polymer and the wall atom
+special_bonds fene                    #
+  0 = max # of 1-2 neighbors
+  5 = max # of special neighbors
+  special bonds CPU = 0.0178199 secs
+pair_style	  lj/cut 1.122462         # LJ potential with rc=2^1/6
+#pair_coeff	  * * 1.0 1.0             # LJ potential acts between all atoms
+pair_coeff    1 1 0.0 0.0
+pair_coeff    1 2 1.0 1.0
+pair_coeff    1 3 1.0 1.0
+pair_coeff    2 2 1.0 1.0
+pair_coeff    2 3 1.0 1.0
+pair_coeff    2 4 1.0 1.0
+pair_coeff    3 3 1.0 1.0
+pair_coeff    3 4 1.0 1.0
+pair_coeff    4 4 0.0 0.0
+neighbor      10 bin                  #
+neigh_modify  one 4000
+
+#--- Create and read the molecule file ---#
+python        BSMolf input 1 $N format i file BSMolf.py
+python        BSMolf input 1 30 format i file BSMolf.py
+python        BSMolf invoke    # Call the python function with number of beads to write the mol file
+molecule      bs     bsmol.txt     # Read the Mol file to define the polymer chain
+Read molecule bs:
+  30 atoms with max type 2
+  29 bonds with max type 1
+  0 angles with max type 0
+  0 dihedrals with max type 0
+  0 impropers with max type 0
+
+#--- Define the FCC wall region ---#
+region        wall  block 0 ${xhi} 0 ${yhi} 0 ${wthick}
+region        wall  block 0 20 0 ${yhi} 0 ${wthick}
+region        wall  block 0 20 0 20 0 ${wthick}
+region        wall  block 0 20 0 20 0 3
+lattice       fcc 1
+Lattice spacing in x,y,z = 1.5874 1.5874 1.5874
+
+#--- Create the Top Brush  (At the bottom then rotate 180 degrees to top) ---#
+
+create_atoms  1 region wall
+Created 1352 atoms
+  create_atoms CPU = 0.00878716 secs
+group         twall  region wall
+1352 atoms in group twall
+#group         tsurf  region wsurf
+
+# A loop to insert the Chains into the sim box
+variable      i loop $M                                   # Index to insert N total number of chains
+variable      i loop 30                                   
+label         loop                                        # Start of loop
+variable      randni equal round(random(1,${ntwall},$s))  # Pick a random "top" wall atom
+variable      randni equal round(random(1,1352,$s))  
+variable      randni equal round(random(1,1352,234897))  
+#print         "seed is = $s"
+#print         "i = $(v_i)"
+variable      randatomi equal ${randni}                   # This is to obtain an integer number for atom-id
+variable      randatomi equal 850                   
+variable      randzi equal z[${randatomi}]                # Determine the z coordinate of the chosen atom
+variable      randzi equal z[850]                
+#print         "z coord of randatom is = ${randzi}"
+# if the chosen atom is not a surface atom then restart the loop
+if            "${randzi} < $(v_wthick - 0.7)" then "jump MDPBB.in loop"
+set           atom ${randatomi} type 4                    # Set this grafted wall atom as a new type
+set           atom 850 type 4                    
+  1 settings made for type
+variable      x0 equal x[${randatomi}]                    # Determine its x-coord
+variable      x0 equal x[850]                    
+variable      y0 equal y[${randatomi}]                    # Determine its y-coord
+variable      y0 equal y[850]                    
+variable      check0 equal ${check}                       # Count the number of atoms in the simulation
+variable      check0 equal 1352                       
+variable      b equal ${check}+1                          # The grafted bead id will be one higher after being inserted
+variable      b equal 1352+1                          
+#print         "Grafted Bead ID = $b"
+#print         "Random Wall atom = ${randatomi}"
+#print         "x = ${x0}"
+#print         "y = ${y0}"
+variable      flag python A_Check         # Define a flag to check that the atom-id was not previously picked
+# If flag = 1 then that means this random atom is already grafted if flag = 0 then atom is free to be grafted
+# Define a python function that performs this check and keeps track throughout the loop to ensure no atom is picked twice
+python        A_Check input 2 v_randatomi v_M return v_flag format iii file A_Check.py
+variable      flag0 equal ${flag}                         # Invoke the python function
+ERROR on proc 0: Python function evaluation failed (../python_impl.cpp:333)
+Last command: variable      flag0 equal ${flag}                         # Invoke the python function

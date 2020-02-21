@@ -1,0 +1,807 @@
+next          Vwalli
+jump          main.in sim
+
+include        ecs.in
+# This is an input script that creates a mono disperse polymer brush bilayer
+# A coarse grained bead-spring model is used for the polymers which are end
+# grafted to the surfaces of 2 opposing FCC walls at random sites.
+
+clear
+OMP_NUM_THREADS environment is not set. Defaulting to 1 thread. (src/comm.cpp:88)
+  using 1 OpenMP thread(s) per MPI task
+
+
+#--- Read in the Restart file ---#
+
+read_restart    MDPBB.rst
+  restoring atom style bond from restart
+  orthogonal box = (0 0 0) to (30 30 70.1)
+  1 by 1 by 1 MPI processor grid
+  restoring pair style lj/cut from restart
+  restoring bond style hybrid from restart
+  9376 atoms
+  32540 bonds
+  12 = max # of 1-2 neighbors
+  12 = max # of special neighbors
+  special bonds CPU = 0.0063403 secs
+  read_restart CPU = 0.0123894 secs
+reset_timestep  0
+
+#--- Redefine the bond coeffs ---#
+
+bond_coeff    1 fene 30.0 1.5 0.0 0.0      # Values obtained from literature [Grest, Galushcko]
+bond_coeff    2 fene 30.0 1.5 0.0 0.0       # This is the grafting bond between the polymer and the wall atom
+bond_coeff    3 harmonic 800.0 $(1.5874 * sqrt(2)/2)
+bond_coeff    3 harmonic 800.0 1.1224613044555256103
+
+neigh_modify   every 1 delay 0 check yes
+
+#--- Define variables ---#
+
+# for dimensional values: eps = 4.14e-21 J at T = 300K and sigma = 0.5nm
+
+#--- Moved to main.in ---#
+#variable       Temp       equal ${Tstr} #[Grest96]
+#variable       Tstep     equal 0.005                       # Timestep in Tau (default = 0.005)
+#variable       Nequil    equal 10000                       # Number of timesteps to equilibrate
+#variable       Ncomp     equal 200000                      # Number of timesteps to compress - until no more occilation of walls
+#variable       Nshear    equal 1000000                     # Number of timesteps to shear - use approx 4ns for 10m/s
+#variable       Nthermo   equal 1000                        # Number of timesteps between thermo data prints
+#variable       Ndump_e   equal 10000
+#variable       Ndump_c   equal 10000                       # Number of timesteps per dump file (compression)
+#variable       Ndump_s   equal 10000                       # Number of timesteps per dump file (shear)
+#variable       Pcomp     equal 1
+variable        Pcomp2    equal ${Pcomp}
+variable        Pcomp2    equal 1
+variable        Vwall     equal $(v_Vwalli * v_Vscale)
+variable        Vwall     equal 0.2000000000000000111
+
+# For Equilibration - density profiles (10 for entire run)
+variable       Nfreqe   equal ${Nequil}/10                  # Calculate bin averages every this many timesteps
+variable       Nfreqe   equal 3000/10                  
+variable       Neverye  equal 100                           # Use input values every this many timesteps
+variable       Nrepeate equal ${Nfreqe}/${Neverye}          #s Number of times to use input values
+variable       Nrepeate equal 300/${Neverye}          
+variable       Nrepeate equal 300/100          
+
+
+# For compression - density profiles (10 for entire run)
+variable       Nfreqc   equal ${Ncomp}/10                  # Calculate bin averages every this many timesteps
+variable       Nfreqc   equal 7000/10                  
+variable       Neveryc  equal 100                          # Use input values every this many timesteps
+variable       Nrepeatc equal ${Nfreqc}/${Neveryc}         # Number of times to use input values
+variable       Nrepeatc equal 700/${Neveryc}         
+variable       Nrepeatc equal 700/100         
+
+# For Shear - density profiles (10 for entire run)
+variable       Nfreqs   equal ${Nshear}/10                  # Calculate bin averages every this many timesteps
+variable       Nfreqs   equal 40000/10                  
+variable       Neverys  equal 100                          # Use input values every this many timesteps
+variable       Nrepeats equal ${Nfreqs}/${Neverys}         # Number of times to use input values
+variable       Nrepeats equal 4000/${Neverys}         
+variable       Nrepeats equal 4000/100         
+
+
+variable       binres   equal  0.001                       # Giving 1000 data points across the sim. box
+
+
+
+variable       bwzmin  equal bound(bwall,zmin)
+variable       bwzmax  equal bound(bwall,zmax)
+variable       twzmin  equal bound(twall,zmin)
+variable       twzmax  equal bound(twall,zmax)
+variable       c       equal count(gbeads)
+variable       surfcov equal $(v_M/(lx*ly))
+variable       surfcov equal 0.066666666666666665741
+variable       D       equal v_twzmin-v_bwzmax
+variable       Dout    equal v_twzmax-v_bwzmin
+variable       srate   equal (v_Vwall/v_D)
+
+
+#--- Define regions and groups ---#
+
+print        "bwzmin = ${bwzmin}"
+bwzmin = 0
+print        "bwzmax = ${bwzmax}"
+bwzmax = 2.3811015779523
+print        "twzmin = ${twzmin}"
+twzmin = 67.6188984220477
+print        "twzmax = ${twzmax}"
+twzmax = 70
+
+region         bwallb  block  INF INF INF INF ${bwzmin} $(v_bwzmin + 0.4) units box
+region         bwallb  block  INF INF INF INF 0 $(v_bwzmin + 0.4) units box
+region         bwallb  block  INF INF INF INF 0 0.4000000000000000222 units box
+region         bwallm  block  INF INF INF INF $(v_bwzmin + 0.35) $(v_bwzmax - 0.35) units box
+region         bwallm  block  INF INF INF INF 0.3499999999999999778 $(v_bwzmax - 0.35) units box
+region         bwallm  block  INF INF INF INF 0.3499999999999999778 2.0311015779522998415 units box
+region         bwallt  block  INF INF INF INF $(v_bwzmax - 0.7) $(v_bwzmax) units box
+region         bwallt  block  INF INF INF INF 1.6811015779522999747 $(v_bwzmax) units box
+region         bwallt  block  INF INF INF INF 1.6811015779522999747 2.3811015779522999303 units box
+region         bmelt   block  INF INF INF INF $(v_bwzmax) $(v_twzmax / 2) units box
+region         bmelt   block  INF INF INF INF 2.3811015779522999303 $(v_twzmax / 2) units box
+region         bmelt   block  INF INF INF INF 2.3811015779522999303 35 units box
+region         tmelt   block  INF INF INF INF $(v_twzmax / 2)  $(v_twzmin - 0.1) units box
+region         tmelt   block  INF INF INF INF 35  $(v_twzmin - 0.1) units box
+region         tmelt   block  INF INF INF INF 35  67.518898422047712415 units box
+region         twallb  block  INF INF INF INF $(v_twzmin - 0.1) $(v_twzmin + 0.35) units box
+region         twallb  block  INF INF INF INF 67.518898422047712415 $(v_twzmin + 0.35) units box
+region         twallb  block  INF INF INF INF 67.518898422047712415 67.968898422047701047 units box
+region         twallm  block  INF INF INF INF $(v_twzmin + 0.35) $(v_twzmax - 0.35) units box
+region         twallm  block  INF INF INF INF 67.968898422047701047 $(v_twzmax - 0.35) units box
+region         twallm  block  INF INF INF INF 67.968898422047701047 69.650000000000005684 units box
+region         twallt  block  INF INF INF INF $(v_twzmax - 0.35) $(v_twzmax) units box
+region         twallt  block  INF INF INF INF 69.650000000000005684 $(v_twzmax) units box
+region         twallt  block  INF INF INF INF 69.650000000000005684 70 units box
+
+group          bwsurf  region bwallt
+722 atoms in group bwsurf
+group          bwbulk  region bwallm
+1444 atoms in group bwbulk
+group          bwout   region bwallb
+722 atoms in group bwout
+group          bbeads  region bmelt
+1800 atoms in group bbeads
+group          tbeads  region tmelt
+1800 atoms in group tbeads
+group          abeads  union  bbeads tbeads
+3600 atoms in group abeads
+group          twsurf  region twallb
+722 atoms in group twsurf
+group          twbulk  region twallm
+1444 atoms in group twbulk
+group          twout   region twallt
+722 atoms in group twout
+group          rest4bot union abeads twall
+6488 atoms in group rest4bot
+group          rest4top union abeads bwall
+6488 atoms in group rest4top
+group          walls    union bwall twall
+5776 atoms in group walls
+group          alltop   union twall tbeads
+4688 atoms in group alltop
+# Other groups are: gbeads fbeads bwall twall
+
+info system
+info coeffs
+
+#--- Exclude wall-wall interactions ---#
+
+#neigh_modify exclude type 1 1
+#neigh_modify exclude type 1 4
+#neigh_modify exclude type 4 4
+
+
+############
+# Computes #
+############
+
+compute         Vir all pressure thermo_temp virial
+compute         melTemp   abeads temp
+compute         melPress  all    pressure melTemp
+compute         wallTemp  walls  temp
+compute         wallPress all    pressure wallTemp
+variable        melDens   equal  $(mass(abeads))/(lx*ly*v_D)
+variable        melDens   equal  3600/(lx*ly*v_D)
+
+#--- Forces and Energies ---#
+
+compute         fbwall  bwall group/group rest4bot
+compute         ftwall  twall group/group rest4top
+compute         fwalls  bwall group/group twall
+
+#--- Like done in comp_shear.in ---#
+group           rest_bot union abeads bwall
+6488 atoms in group rest_bot
+group           rest_bot2 subtract all bwsurf
+8654 atoms in group rest_bot2
+compute         ggbot bwsurf group/group rest_bot
+compute         ggbot2 bwsurf group/group rest_bot
+
+group           rest_top union abeads twall
+6488 atoms in group rest_top
+group           rest_top2 subtract all twsurf
+8654 atoms in group rest_top2
+compute         ggtop twsurf group/group rest_top
+compute         ggtop2 twsurf group/group rest_top2
+
+
+#--- Calculate the applied force on each atom for the pressure applied---#
+variable Fcomp equal (${Pcomp}*lx*ly)
+variable Fcomp equal (1*lx*ly)
+variable Fcatom equal (-${Fcomp})/(count(twout))
+variable Fcatom equal (-900)/(count(twout))
+
+
+#compute	        peratom   all   stress/atom NULL
+#compute	        p_all     all   reduce sum c_peratom[1] c_peratom[2] c_peratom[3]
+#variable	      press_all equal -(c_p_all[1]+c_p_all[2]+c_p_all[3])/(3*v_volume)
+
+#--- Method of Planes for local stress tensor ---#
+
+
+
+info groups variables                              # For diagnostics
+
+
+#################
+# Equilibration #
+#################
+
+#--- Number Density profiles (Equil) ---#
+compute         eabeads abeads chunk/atom bin/1d z lower $(zhi * v_binres) # Check bound keyword to maybe only bin melt area
+compute         eabeads abeads chunk/atom bin/1d z lower 0.070099999999999995648 
+fix             abeads_edz abeads ave/chunk ${Neverye} ${Nrepeate} ${Nfreqe} eabeads density/number file abeads_edz
+fix             abeads_edz abeads ave/chunk 100 ${Nrepeate} ${Nfreqe} eabeads density/number file abeads_edz
+fix             abeads_edz abeads ave/chunk 100 3 ${Nfreqe} eabeads density/number file abeads_edz
+fix             abeads_edz abeads ave/chunk 100 3 300 eabeads density/number file abeads_edz
+compute         ebbeads bbeads chunk/atom bin/1d z lower $(zhi * v_binres) # Check bound keyword to maybe only bin melt area
+compute         ebbeads bbeads chunk/atom bin/1d z lower 0.070099999999999995648 
+fix             bbeads_edz bbeads  ave/chunk ${Neverye} ${Nrepeate} ${Nfreqe} ebbeads density/number file bbeads_edz
+fix             bbeads_edz bbeads  ave/chunk 100 ${Nrepeate} ${Nfreqe} ebbeads density/number file bbeads_edz
+fix             bbeads_edz bbeads  ave/chunk 100 3 ${Nfreqe} ebbeads density/number file bbeads_edz
+fix             bbeads_edz bbeads  ave/chunk 100 3 300 ebbeads density/number file bbeads_edz
+compute         etbeads tbeads chunk/atom bin/1d z lower $(zhi * v_binres) # Check bound keyword to maybe only bin melt area
+compute         etbeads tbeads chunk/atom bin/1d z lower 0.070099999999999995648 
+fix             tbeads_edz tbeads  ave/chunk ${Neverye} ${Nrepeate} ${Nfreqe} etbeads density/number file tbeads_edz
+fix             tbeads_edz tbeads  ave/chunk 100 ${Nrepeate} ${Nfreqe} etbeads density/number file tbeads_edz
+fix             tbeads_edz tbeads  ave/chunk 100 3 ${Nfreqe} etbeads density/number file tbeads_edz
+fix             tbeads_edz tbeads  ave/chunk 100 3 300 etbeads density/number file tbeads_edz
+
+compute         mope all stress/mop/profile z lower $(zhi * v_binres) total
+compute         mope all stress/mop/profile z lower 0.070099999999999995648 total
+fix mope        all ave/time ${Neverye} ${Nrepeate} ${Nfreqe} c_mope[*] ave running overwrite file mope.time mode vector
+fix mope        all ave/time 100 ${Nrepeate} ${Nfreqe} c_mope[*] ave running overwrite file mope.time mode vector
+fix mope        all ave/time 100 3 ${Nfreqe} c_mope[*] ave running overwrite file mope.time mode vector
+fix mope        all ave/time 100 3 300 c_mope[*] ave running overwrite file mope.time mode vector
+
+#--- Radius of gyration of the bottom brush chains ---#
+compute         chunk_bot bbeads chunk/atom molecule
+compute         rgbbeads bbeads gyration/chunk chunk_bot
+variable        aveRg    equal  (ave(c_rgbbeads))
+
+
+#--- Fixes (Equil) ---#
+
+#velocity       abeads create ${Temp} 290842 dist gaussian
+#fix             nvt_melt    abeads nvt temp ${Temp} ${Temp} 100.0
+
+# NVE for all and langevin thermostat for melt
+fix             nve_melt abeads nve
+fix             lang_melt abeads langevin ${Temp} ${Temp} 0.1 798753
+fix             lang_melt abeads langevin 1 ${Temp} 0.1 798753
+fix             lang_melt abeads langevin 1 1 0.1 798753
+fix             nve_walls  walls nve
+
+#--- Langevin thermostat the bulk of the walls in y ---#
+# Only thermostat the bulk of the wall not the surface or the outer layer
+compute         Tempyt     twbulk temp/partial 0 1 0
+fix             lang_tbulk twbulk langevin ${Temp} ${Temp} 0.1 87239 zero yes
+fix             lang_tbulk twbulk langevin 1 ${Temp} 0.1 87239 zero yes
+fix             lang_tbulk twbulk langevin 1 1 0.1 87239 zero yes
+fix_modify      lang_tbulk temp Tempyt
+compute         Tempyb     bwbulk temp/partial 0 1 0
+fix             lang_bbulk bwbulk langevin ${Temp} ${Temp} 0.1 87239 zero yes
+fix             lang_bbulk bwbulk langevin 1 ${Temp} 0.1 87239 zero yes
+fix             lang_bbulk bwbulk langevin 1 1 0.1 87239 zero yes
+fix_modify      lang_bbulk temp Tempyb
+
+#--- Freeze the outer layer of the walls ---#
+fix             freeze_bout bwout setforce 0.0 0.0 0.0
+fix             freeze_tout twout setforce 0.0 0.0 0.0
+
+#--- Thermo output ---#
+
+thermo_style  custom step etotal ke pe epair temp c_melTemp c_wallTemp v_Fcatom v_Pcomp2 press pxx pyy pzz pxy pxz pyz c_Vir c_Vir[1] c_Vir[2] c_Vir[3] c_Vir[4] c_Vir[5] c_Vir[6] c_melPress c_wallPress v_melDens v_surfcov v_aveRg v_Vwall v_srate v_D v_bwzmax zhi c_fbwall[1] c_fbwall[3] c_ftwall[1] c_ftwall[3] c_ggbot[1] c_ggbot[3] c_ggtop[1] c_ggtop[3]
+thermo        ${Nthermo}
+thermo        1000
+thermo_modify flush yes
+
+#--- Dumps ---#
+dump           eq all image ${Nequil} stg1.*.jpg type type zoom 1.65 view 60 120 bond none none
+dump           eq all image 3000 stg1.*.jpg type type zoom 1.65 view 60 120 bond none none
+dump            eqxyz all xyz ${Nequil} eq.xyz
+dump            eqxyz all xyz 3000 eq.xyz
+
+#--- Run Equilibration ---#
+timestep    ${Tstep}
+timestep    0.005
+run         ${Nequil}
+run         3000
+WARNING: compute stress/mop/profile does not account for bond potentials (src/USER-MISC/compute_stress_mop_profile.cpp:193)
+Neighbor list info ...
+  update every 1 steps, delay 0 steps, check yes
+  max neighbors/atom: 2000, page size: 100000
+  master list distance cutoff = 1.42246
+  ghost atom cutoff = 1.42246
+  binsize = 0.711231, bins = 43 43 99
+  9 neighbor lists, perpetual/occasional/extra = 1 8 0
+  (1) pair lj/cut, perpetual
+      attributes: half, newton on
+      pair build: half/bin/newton
+      stencil: half/bin/3d/newton
+      bin: standard
+  (2) compute group/group, occasional, copy from (1)
+      attributes: half, newton on
+      pair build: copy
+      stencil: none
+      bin: none
+  (3) compute group/group, occasional, copy from (1)
+      attributes: half, newton on
+      pair build: copy
+      stencil: none
+      bin: none
+  (4) compute group/group, occasional, copy from (1)
+      attributes: half, newton on
+      pair build: copy
+      stencil: none
+      bin: none
+  (5) compute group/group, occasional, copy from (1)
+      attributes: half, newton on
+      pair build: copy
+      stencil: none
+      bin: none
+  (6) compute group/group, occasional, copy from (1)
+      attributes: half, newton on
+      pair build: copy
+      stencil: none
+      bin: none
+  (7) compute group/group, occasional, copy from (1)
+      attributes: half, newton on
+      pair build: copy
+      stencil: none
+      bin: none
+  (8) compute group/group, occasional, copy from (1)
+      attributes: half, newton on
+      pair build: copy
+      stencil: none
+      bin: none
+  (9) compute stress/mop/profile, occasional, copy from (1)
+      attributes: half, newton on
+      pair build: copy
+      stencil: none
+      bin: none
+WARNING: Inconsistent image flags (src/domain.cpp:784)
+Per MPI rank memory allocation (min/avg/max) = 10.98 | 10.98 | 10.98 Mbytes
+Step TotEng KinEng PotEng E_pair Temp c_melTemp c_wallTemp v_Fcatom v_Pcomp2 Press Pxx Pyy Pzz Pxy Pxz Pyz c_Vir c_Vir[1] c_Vir[2] c_Vir[3] c_Vir[4] c_Vir[5] c_Vir[6] c_melPress c_wallPress v_melDens v_surfcov v_aveRg v_Vwall v_srate v_D v_bwzmax Zhi c_fbwall[1] c_fbwall[3] c_ftwall[1] c_ftwall[3] c_ggbot[1] c_ggbot[3] c_ggtop[1] c_ggtop[3] 
+WARNING: One or more chunks do not contain all atoms in molecule (src/compute_chunk_atom.cpp:1161)
+       0     2.487909            0     2.487909  -0.33075106            0            0            0   -1.2465374            1   0.93046004    1.0662539    1.0675059   0.65762036 0.00075204815 3.1658072e-05 -0.00019811458   0.93046004    1.0662539    1.0675059   0.65762036 0.00075204815 3.1658072e-05 -0.00019811458   0.93046004   0.93046004  0.061314149  0.066666667    2.2621565          0.2 0.0030657075    65.237797    2.3811016         70.1 -2.4552385e-05 -0.068685389 0.00014519744  0.068753657 -2.4552385e-05 -0.068685389 0.00014519744  0.068753657 
+    1000    4.5956687    1.3849797     3.210689  -0.14545946   0.92341829   0.99953434    0.8761424   -1.2465374            1   0.36027593   0.72727409   0.74265539  -0.38910168 0.0013511402 0.0046410928 -0.0027521682   0.22305852   0.56660551   0.61687353  -0.51430348 0.0017217944 0.0044180547 -0.001994996   0.28007745   0.30325701  0.061517223  0.066666667    2.2269526          0.2 0.0030758611    65.022441    2.4910516         70.1 -0.0050560695 -0.063332215 0.00035799469  0.068114848 -0.0050560695 -0.063332215 0.00035799469  0.068114848 
+    2000    4.5478862    1.3878977    3.1599885  -0.15281446    0.9253638    1.0058986   0.87533445   -1.2465374            1   0.45813283   0.78717008   0.80678719  -0.21955878 0.0042707264 0.0063730519 -0.037063157   0.32062632   0.63289354   0.68235724  -0.35337182 0.0018367389 0.0088564561 -0.037289903    0.3780083   0.40075085  0.061549438  0.066666667    2.1943266          0.2 0.0030774719    64.988408    2.5103893         70.1 -0.0045684884 -0.049147409 -0.011246906  0.071198669 -0.0045684884 -0.049147409 -0.011246906  0.071198669 
+    3000    4.5438888    1.3397544    3.2041344  -0.15794311   0.89326486    1.0020976   0.82559456   -1.2465374            1   0.40384877   0.73302846   0.77500891  -0.29649106 0.0014572846   0.02607421 0.0073652375   0.27111207   0.59133772   0.64860503  -0.42660653 0.0036760606  0.027539693 0.0069262055   0.32827723   0.34668362  0.061523855  0.066666667    2.1676881          0.2 0.0030761927    65.015432    2.4984261         70.1 -0.00068932821 -0.068294859 0.0043419427  0.078015058 -0.00068932821 -0.068294859 0.0043419427  0.078015058 
+Loop time of 5.8458 on 1 procs for 3000 steps with 9376 atoms
+
+Performance: 221697.781 tau/day, 513.189 timesteps/s
+98.4% CPU use with 1 MPI tasks x 1 OpenMP threads
+
+MPI task timing breakdown:
+Section |  min time  |  avg time  |  max time  |%varavg| %total
+---------------------------------------------------------------
+Pair    | 0.32671    | 0.32671    | 0.32671    |   0.0 |  5.59
+Bond    | 1.4232     | 1.4232     | 1.4232     |   0.0 | 24.35
+Neigh   | 1.3637     | 1.3637     | 1.3637     |   0.0 | 23.33
+Comm    | 0.10865    | 0.10865    | 0.10865    |   0.0 |  1.86
+Output  | 0.049128   | 0.049128   | 0.049128   |   0.0 |  0.84
+Modify  | 2.4435     | 2.4435     | 2.4435     |   0.0 | 41.80
+Other   |            | 0.1308     |            |       |  2.24
+
+Nlocal:    9376 ave 9376 max 9376 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+Nghost:    1803 ave 1803 max 1803 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+Neighs:    5189 ave 5189 max 5189 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+
+Total # of neighbors = 5189
+Ave neighs/atom = 0.553434
+Ave special neighs/atom = 6.94113
+Neighbor list builds = 390
+Dangerous builds = 0
+undump      eq
+undump       eqxyz
+
+#--- Unfix Equil ---#
+
+unfix abeads_edz
+unfix bbeads_edz
+unfix tbeads_edz
+unfix mope
+
+unfix freeze_tout
+
+
+###############
+# Compression #
+###############
+
+
+#--- Bring the brushes closer together fit the sim box ---#
+
+variable       bbzmax  equal bound(bbeads,zmax)
+variable       tbzmin  equal bound(tbeads,zmin)
+displace_atoms  alltop move 0.0 0.0 -$(v_tbzmin - v_bbzmax) units box
+displace_atoms  alltop move 0.0 0.0 -35.690105741163996811 units box
+variable z_f equal bound(all,zmin)
+variable z_c equal bound(all,zmax)
+change_box all z final ${z_f} $(v_z_c + 0.1) units box
+change_box all z final 0 $(v_z_c + 0.1) units box
+change_box all z final 0 34.40989425883600461 units box
+  orthogonal box = (0 0 0) to (30 30 34.4099)
+
+print         "D = $D"
+D = 29.3253262090888
+print         "D = $(v_twzmin - v_bwzmax)"
+D = 29.325326209088750318
+info variables
+
+#--- Computes ---#
+
+# Number density profiles and mop
+
+compute         cabeads abeads chunk/atom bin/1d z lower $(zhi * v_binres) # Check bound keyword to maybe only bin melt area
+compute         cabeads abeads chunk/atom bin/1d z lower 0.03440989425883600461 
+fix             abeads_cdz abeads  ave/chunk ${Neveryc} ${Nrepeatc} ${Nfreqc} cabeads density/number file abeads_cdz
+fix             abeads_cdz abeads  ave/chunk 100 ${Nrepeatc} ${Nfreqc} cabeads density/number file abeads_cdz
+fix             abeads_cdz abeads  ave/chunk 100 7 ${Nfreqc} cabeads density/number file abeads_cdz
+fix             abeads_cdz abeads  ave/chunk 100 7 700 cabeads density/number file abeads_cdz
+compute         cbbeads bbeads chunk/atom bin/1d z lower $(zhi * v_binres) # Check bound keyword to maybe only bin melt area
+compute         cbbeads bbeads chunk/atom bin/1d z lower 0.03440989425883600461 
+fix             bbeads_cdz bbeads  ave/chunk ${Neveryc} ${Nrepeatc} ${Nfreqc} cbbeads density/number file bbeads_cdz
+fix             bbeads_cdz bbeads  ave/chunk 100 ${Nrepeatc} ${Nfreqc} cbbeads density/number file bbeads_cdz
+fix             bbeads_cdz bbeads  ave/chunk 100 7 ${Nfreqc} cbbeads density/number file bbeads_cdz
+fix             bbeads_cdz bbeads  ave/chunk 100 7 700 cbbeads density/number file bbeads_cdz
+compute         ctbeads tbeads chunk/atom bin/1d z lower $(zhi * v_binres) # Check bound keyword to maybe only bin melt area
+compute         ctbeads tbeads chunk/atom bin/1d z lower 0.03440989425883600461 
+fix             tbeads_cdz tbeads  ave/chunk ${Neveryc} ${Nrepeatc} ${Nfreqc} ctbeads density/number file tbeads_cdz
+fix             tbeads_cdz tbeads  ave/chunk 100 ${Nrepeatc} ${Nfreqc} ctbeads density/number file tbeads_cdz
+fix             tbeads_cdz tbeads  ave/chunk 100 7 ${Nfreqc} ctbeads density/number file tbeads_cdz
+fix             tbeads_cdz tbeads  ave/chunk 100 7 700 ctbeads density/number file tbeads_cdz
+
+compute         mopc all stress/mop/profile z lower $(zhi * v_binres) total
+compute         mopc all stress/mop/profile z lower 0.03440989425883600461 total
+fix mopc        all ave/time ${Neveryc} ${Nrepeatc} ${Nfreqc} c_mopc[*] ave running overwrite file mopc.time mode vector
+fix mopc        all ave/time 100 ${Nrepeatc} ${Nfreqc} c_mopc[*] ave running overwrite file mopc.time mode vector
+fix mopc        all ave/time 100 7 ${Nfreqc} c_mopc[*] ave running overwrite file mopc.time mode vector
+fix mopc        all ave/time 100 7 700 c_mopc[*] ave running overwrite file mopc.time mode vector
+
+
+#--- Fixes ---#
+fix             freeze_tout twout setforce 0.0 0.0 NULL
+fix             comp_tout twout aveforce 0.0 0.0 ${Fcatom}
+fix             comp_tout twout aveforce 0.0 0.0 -1.24653739612188
+fix             rwalls all wall/reflect zlo EDGE zhi EDGE
+
+
+
+
+#--- Dumps ---#
+dump           comp all image ${Ncomp} stg2.*.jpg type type zoom 1.3 view 60 120 bond none none
+dump           comp all image 7000 stg2.*.jpg type type zoom 1.3 view 60 120 bond none none
+dump            cpxyz all xyz ${Ncomp} cp.xyz
+dump            cpxyz all xyz 7000 cp.xyz
+
+#--- Run Compression ---#
+timestep    ${Tstep}
+timestep    0.005
+run         ${Ncomp}
+run         7000
+WARNING: compute stress/mop/profile does not account for bond potentials (src/USER-MISC/compute_stress_mop_profile.cpp:193)
+WARNING: compute stress/mop/profile does not account for bond potentials (src/USER-MISC/compute_stress_mop_profile.cpp:193)
+Neighbor list info ...
+  update every 1 steps, delay 0 steps, check yes
+  max neighbors/atom: 2000, page size: 100000
+  master list distance cutoff = 1.42246
+  ghost atom cutoff = 1.42246
+  binsize = 0.711231, bins = 43 43 49
+  10 neighbor lists, perpetual/occasional/extra = 1 9 0
+  (1) pair lj/cut, perpetual
+      attributes: half, newton on
+      pair build: half/bin/newton
+      stencil: half/bin/3d/newton
+      bin: standard
+  (2) compute group/group, occasional, copy from (1)
+      attributes: half, newton on
+      pair build: copy
+      stencil: none
+      bin: none
+  (3) compute group/group, occasional, copy from (1)
+      attributes: half, newton on
+      pair build: copy
+      stencil: none
+      bin: none
+  (4) compute group/group, occasional, copy from (1)
+      attributes: half, newton on
+      pair build: copy
+      stencil: none
+      bin: none
+  (5) compute group/group, occasional, copy from (1)
+      attributes: half, newton on
+      pair build: copy
+      stencil: none
+      bin: none
+  (6) compute group/group, occasional, copy from (1)
+      attributes: half, newton on
+      pair build: copy
+      stencil: none
+      bin: none
+  (7) compute group/group, occasional, copy from (1)
+      attributes: half, newton on
+      pair build: copy
+      stencil: none
+      bin: none
+  (8) compute group/group, occasional, copy from (1)
+      attributes: half, newton on
+      pair build: copy
+      stencil: none
+      bin: none
+  (9) compute stress/mop/profile, occasional, copy from (1)
+      attributes: half, newton on
+      pair build: copy
+      stencil: none
+      bin: none
+  (10) compute stress/mop/profile, occasional, copy from (1)
+      attributes: half, newton on
+      pair build: copy
+      stencil: none
+      bin: none
+WARNING: Inconsistent image flags (src/domain.cpp:784)
+Per MPI rank memory allocation (min/avg/max) = 8.84 | 8.84 | 8.84 Mbytes
+Step TotEng KinEng PotEng E_pair Temp c_melTemp c_wallTemp v_Fcatom v_Pcomp2 Press Pxx Pyy Pzz Pxy Pxz Pyz c_Vir c_Vir[1] c_Vir[2] c_Vir[3] c_Vir[4] c_Vir[5] c_Vir[6] c_melPress c_wallPress v_melDens v_surfcov v_aveRg v_Vwall v_srate v_D v_bwzmax Zhi c_fbwall[1] c_fbwall[3] c_ftwall[1] c_ftwall[3] c_ggbot[1] c_ggbot[3] c_ggtop[1] c_ggtop[3] 
+    3000    4.5438888    1.3397544    3.2041344  -0.15794311   0.89326486    1.0020976   0.82559456   -1.2465374            1   0.82272263     1.493329    1.5788518  -0.60401299  0.002968787  0.053118504  0.015004497    0.5523108     1.204676    1.3213413  -0.86908485 0.0074888881  0.056103992  0.014110099   0.66876792   0.70626551   0.13640087  0.066666667    2.1676881          0.2 0.0068200435    29.325326    2.4984261    34.409894 -0.00068932821 -0.068294859 0.0043419427  0.078015058 -0.00068932821 -0.068294859 0.0043419427  0.078015058 
+    4000    4.4899799    1.3471071    3.1428729  -0.15765144   0.89816717   0.98397404   0.84484755   -1.2465374            1    1.1450353    1.7169696    1.7702854 -0.052149057 0.00070204767 -0.058114995 -0.0022413958   0.87313947    1.4354059    1.5146886  -0.33067618 -0.0015696041 -0.055433714 -0.00010000823   0.98749038    1.0306844   0.14439094  0.066666667    2.1456763          0.2 0.0072195468     27.70257    2.5166814    34.409894 -0.0056010908  -0.07049974  0.007749942   0.18247289 -0.0056010908  -0.07049974  0.007749942   0.18247289 
+    5000    4.4861189    1.3658321    3.1202868  -0.15379816   0.91065186    1.0163908   0.84491266   -1.2465374            1    1.2668718    1.8445808    1.8433204   0.11271425 -0.0060586112  0.024696061  0.032510974   0.99119656    1.5474437    1.5883998  -0.16225383 -0.0015136656  0.025942758  0.033833778    1.1093147    1.1487536   0.15102026  0.066666667    2.1140376          0.2 0.0075510132    26.486512     2.495259    34.409894 0.0028181317 -0.056182481  0.004465763    0.2186505 0.0028181317 -0.056182481  0.004465763    0.2186505 
+    6000    4.4645239    1.3300709     3.134453  -0.15439734    0.8868085   0.99882608   0.81715232   -1.2465374            1    1.1819333    1.7893259    1.7756816  -0.01920769 0.0079042936  0.023558123 -0.031257082   0.91347594     1.505477    1.5107344  -0.27578349    0.0109956  0.023307733 -0.031456178    1.0295529    1.0658564   0.15652238  0.066666667    2.0993584          0.2  0.007826119    25.555451     2.503973    34.409894 -0.0075068246 -0.082669769 -0.0083514709   0.19817075 -0.0075068246 -0.082669769 -0.0083514709   0.19817075 
+    7000    4.4628644    1.3243698    3.1384946  -0.15409139   0.88300736    1.0273091   0.79323091   -1.2465374            1    1.1552915    1.7373281    1.7572323 -0.028685872 -0.0037361656 0.0045065697  0.036517437   0.88798486    1.4610272    1.4995068  -0.29657938 -0.0038643296 -0.00093819096  0.039412856    1.0073719    1.0359045   0.16075153  0.066666667    2.0697966          0.2 0.0080375766    24.883122    2.4837806    34.409894 0.0030004961 -0.080619031 0.00021857283   0.18702697 0.0030004961 -0.080619031 0.00021857283   0.18702697 
+    8000    4.4033747    1.3302656    3.0731091  -0.16799198   0.88693831   0.98788635   0.82418072   -1.2465374            1    1.3005074    1.8405993    1.8594658   0.20145715  0.012090826 0.0074419435  -0.02047956    1.0320108    1.5614679    1.5964369 -0.061872515  0.012674129  0.016262409 -0.023633336    1.1468164    1.1857018   0.16422393  0.066666667     2.054744          0.2 0.0082111965    24.356986    2.4823398    34.409894 -0.0083522207 -0.097878867 -0.0023451225   0.17960308 -0.0083522207 -0.097878867 -0.0023451225   0.17960308 
+    9000    4.3927228    1.2948506    3.0978722  -0.16057798    0.8633258   0.99381242   0.78215558   -1.2465374            1    1.2360337    1.7941715     1.817704  0.096225739 -0.0085745442 -0.065971419  0.011949262   0.97468517    1.5241985    1.5682824  -0.16842542 -0.0089862638 -0.064537417  0.015848046    1.0901794    1.1205395   0.16843746  0.066666667    2.0487883          0.2 0.0084218731    23.747686    2.5031554    34.409894 -0.0027770348 -0.078626246 0.0058884337   0.20763717 -0.0027770348 -0.078626246 0.0058884337   0.20763717 
+   10000     4.378407    1.3085937    3.0698132   -0.1661096   0.87248889    1.0142711    0.7842808   -1.2465374            1    1.2354704    1.7999577    1.8259131  0.080540527 0.0053661587  0.012173968 -0.024286184   0.97134799    1.5249299    1.5714479  -0.18233383 0.0012983445 0.0098553935 -0.026351997    1.0892198    1.1175986   0.17170777  0.066666667    2.0499712          0.2 0.0085853884    23.295393    2.4842827    34.409894 -0.0016899795  -0.10240634 0.0084123218   0.17733219 -0.0016899795  -0.10240634 0.0082788234   0.17714794 
+Loop time of 11.976 on 1 procs for 7000 steps with 9376 atoms
+
+Performance: 252504.846 tau/day, 584.502 timesteps/s
+98.8% CPU use with 1 MPI tasks x 1 OpenMP threads
+
+MPI task timing breakdown:
+Section |  min time  |  avg time  |  max time  |%varavg| %total
+---------------------------------------------------------------
+Pair    | 0.75001    | 0.75001    | 0.75001    |   0.0 |  6.26
+Bond    | 2.6946     | 2.6946     | 2.6946     |   0.0 | 22.50
+Neigh   | 2.742      | 2.742      | 2.742      |   0.0 | 22.90
+Comm    | 0.20805    | 0.20805    | 0.20805    |   0.0 |  1.74
+Output  | 0.11775    | 0.11775    | 0.11775    |   0.0 |  0.98
+Modify  | 5.2219     | 5.2219     | 5.2219     |   0.0 | 43.60
+Other   |            | 0.2416     |            |       |  2.02
+
+Nlocal:    9376 ave 9376 max 9376 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+Nghost:    1771 ave 1771 max 1771 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+Neighs:    6976 ave 6976 max 6976 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+
+Total # of neighbors = 6976
+Ave neighs/atom = 0.744027
+Ave special neighs/atom = 6.94113
+Neighbor list builds = 911
+Dangerous builds = 0
+undump      comp
+undump      cpxyz
+
+unfix abeads_cdz
+unfix bbeads_cdz
+unfix tbeads_cdz
+unfix mopc
+
+###############
+# Shearing    #
+###############
+
+#--- Keep only thermostat on walls ---#
+unfix lang_melt
+
+velocity    twout set $(v_Vwall/2) 0.0 0.0  units box
+velocity    twout set 0.10000000000000000555 0.0 0.0  units box
+velocity    bwout set -$(v_Vwall/2) 0.0 0.0  units box
+velocity    bwout set -0.10000000000000000555 0.0 0.0  units box
+
+
+#--- Number Density profiles ---#
+
+compute         sabeads abeads chunk/atom bin/1d z lower $(zhi * v_binres) # Check bound keyword to maybe only bin melt area
+compute         sabeads abeads chunk/atom bin/1d z lower 0.03440989425883600461 
+fix             abeads_sdz abeads  ave/chunk ${Neverys} ${Nrepeats} ${Nfreqs} sabeads density/number file abeads_sdz
+fix             abeads_sdz abeads  ave/chunk 100 ${Nrepeats} ${Nfreqs} sabeads density/number file abeads_sdz
+fix             abeads_sdz abeads  ave/chunk 100 40 ${Nfreqs} sabeads density/number file abeads_sdz
+fix             abeads_sdz abeads  ave/chunk 100 40 4000 sabeads density/number file abeads_sdz
+compute         sbbeads bbeads chunk/atom bin/1d z lower $(zhi * v_binres)  # Check bound keyword to maybe only bin melt area
+compute         sbbeads bbeads chunk/atom bin/1d z lower 0.03440989425883600461  
+fix             bbeads_sdz bbeads  ave/chunk ${Neverys} ${Nrepeats} ${Nfreqs} sbbeads density/number file bbeads_sdz
+fix             bbeads_sdz bbeads  ave/chunk 100 ${Nrepeats} ${Nfreqs} sbbeads density/number file bbeads_sdz
+fix             bbeads_sdz bbeads  ave/chunk 100 40 ${Nfreqs} sbbeads density/number file bbeads_sdz
+fix             bbeads_sdz bbeads  ave/chunk 100 40 4000 sbbeads density/number file bbeads_sdz
+compute         stbeads tbeads chunk/atom bin/1d z lower $(zhi * v_binres) # Check bound keyword to maybe only bin melt area
+compute         stbeads tbeads chunk/atom bin/1d z lower 0.03440989425883600461 
+fix             tbeads_sdz tbeads  ave/chunk ${Neverys} ${Nrepeats} ${Nfreqs} stbeads density/number file tbeads_sdz
+fix             tbeads_sdz tbeads  ave/chunk 100 ${Nrepeats} ${Nfreqs} stbeads density/number file tbeads_sdz
+fix             tbeads_sdz tbeads  ave/chunk 100 40 ${Nfreqs} stbeads density/number file tbeads_sdz
+fix             tbeads_sdz tbeads  ave/chunk 100 40 4000 stbeads density/number file tbeads_sdz
+
+compute         mops all stress/mop/profile z lower $(zhi * v_binres) total
+compute         mops all stress/mop/profile z lower 0.03440989425883600461 total
+fix mops        all ave/time ${Neverys} ${Nrepeats} ${Nfreqs} c_mops[*] ave running overwrite file mops.time mode vector
+fix mops        all ave/time 100 ${Nrepeats} ${Nfreqs} c_mops[*] ave running overwrite file mops.time mode vector
+fix mops        all ave/time 100 40 ${Nfreqs} c_mops[*] ave running overwrite file mops.time mode vector
+fix mops        all ave/time 100 40 4000 c_mops[*] ave running overwrite file mops.time mode vector
+
+
+#--- Temperature and Velocity profiles ---#
+compute        eall all chunk/atom bin/1d z lower $(zhi * v_binres)
+compute        eall all chunk/atom bin/1d z lower 0.03440989425883600461
+#compute        biasT all temp/profile 1 1 1 xyz 100 100 100
+fix            temp_prof   all ave/chunk ${Neverys} ${Nrepeats} ${Nfreqs} eall temp file temp_sz
+fix            temp_prof   all ave/chunk 100 ${Nrepeats} ${Nfreqs} eall temp file temp_sz
+fix            temp_prof   all ave/chunk 100 40 ${Nfreqs} eall temp file temp_sz
+fix            temp_prof   all ave/chunk 100 40 4000 eall temp file temp_sz
+#fix            temp_bias   all ave/chunk ${Neverys} ${Nrepeats} ${Nfreqs} eall temp bias biasT file tempb_sz
+fix            vel_prof_x_s all ave/chunk ${Neverys} ${Nrepeats} ${Nfreqs} eall vx vy file velp_sz
+fix            vel_prof_x_s all ave/chunk 100 ${Nrepeats} ${Nfreqs} eall vx vy file velp_sz
+fix            vel_prof_x_s all ave/chunk 100 40 ${Nfreqs} eall vx vy file velp_sz
+fix            vel_prof_x_s all ave/chunk 100 40 4000 eall vx vy file velp_sz
+
+
+#--- Dumps ---#
+dump           shear all image ${Nshear} stg3.*.jpg type type zoom 1.3 view 60 120 bond none none
+dump           shear all image 40000 stg3.*.jpg type type zoom 1.3 view 60 120 bond none none
+dump            shxyz all xyz ${Nshear} sh.xyz
+dump            shxyz all xyz 40000 sh.xyz
+
+#--- Run Shear ---#
+timestep    ${Tstep}
+timestep    0.005
+run         ${Nshear}
+run         40000
+WARNING: compute stress/mop/profile does not account for bond potentials (src/USER-MISC/compute_stress_mop_profile.cpp:193)
+WARNING: compute stress/mop/profile does not account for bond potentials (src/USER-MISC/compute_stress_mop_profile.cpp:193)
+WARNING: compute stress/mop/profile does not account for bond potentials (src/USER-MISC/compute_stress_mop_profile.cpp:193)
+Neighbor list info ...
+  update every 1 steps, delay 0 steps, check yes
+  max neighbors/atom: 2000, page size: 100000
+  master list distance cutoff = 1.42246
+  ghost atom cutoff = 1.42246
+  binsize = 0.711231, bins = 43 43 49
+  11 neighbor lists, perpetual/occasional/extra = 1 10 0
+  (1) pair lj/cut, perpetual
+      attributes: half, newton on
+      pair build: half/bin/newton
+      stencil: half/bin/3d/newton
+      bin: standard
+  (2) compute group/group, occasional, copy from (1)
+      attributes: half, newton on
+      pair build: copy
+      stencil: none
+      bin: none
+  (3) compute group/group, occasional, copy from (1)
+      attributes: half, newton on
+      pair build: copy
+      stencil: none
+      bin: none
+  (4) compute group/group, occasional, copy from (1)
+      attributes: half, newton on
+      pair build: copy
+      stencil: none
+      bin: none
+  (5) compute group/group, occasional, copy from (1)
+      attributes: half, newton on
+      pair build: copy
+      stencil: none
+      bin: none
+  (6) compute group/group, occasional, copy from (1)
+      attributes: half, newton on
+      pair build: copy
+      stencil: none
+      bin: none
+  (7) compute group/group, occasional, copy from (1)
+      attributes: half, newton on
+      pair build: copy
+      stencil: none
+      bin: none
+  (8) compute group/group, occasional, copy from (1)
+      attributes: half, newton on
+      pair build: copy
+      stencil: none
+      bin: none
+  (9) compute stress/mop/profile, occasional, copy from (1)
+      attributes: half, newton on
+      pair build: copy
+      stencil: none
+      bin: none
+  (10) compute stress/mop/profile, occasional, copy from (1)
+      attributes: half, newton on
+      pair build: copy
+      stencil: none
+      bin: none
+  (11) compute stress/mop/profile, occasional, copy from (1)
+      attributes: half, newton on
+      pair build: copy
+      stencil: none
+      bin: none
+WARNING: Inconsistent image flags (src/domain.cpp:784)
+Per MPI rank memory allocation (min/avg/max) = 9.495 | 9.495 | 9.495 Mbytes
+Step TotEng KinEng PotEng E_pair Temp c_melTemp c_wallTemp v_Fcatom v_Pcomp2 Press Pxx Pyy Pzz Pxy Pxz Pyz c_Vir c_Vir[1] c_Vir[2] c_Vir[3] c_Vir[4] c_Vir[5] c_Vir[6] c_melPress c_wallPress v_melDens v_surfcov v_aveRg v_Vwall v_srate v_D v_bwzmax Zhi c_fbwall[1] c_fbwall[3] c_ftwall[1] c_ftwall[3] c_ggbot[1] c_ggbot[3] c_ggtop[1] c_ggtop[3] 
+   10000      4.37896    1.3091467    3.0698132   -0.1661096   0.87285759    1.0142711   0.78487935   -1.2465374            1    1.2355821     1.800424    1.8259131    0.0804091 0.0053661587  0.012173968 -0.024286184   0.97134799    1.5249299    1.5714479  -0.18233383 0.0012983445 0.0098553935 -0.026351997    1.0892198    1.1177102   0.17170777  0.066666667    2.0499712          0.2 0.0085853884    23.295393    2.4842827    34.409894 -0.0016899795  -0.10240634 0.0084123218   0.17733219 -0.0016899795  -0.10240634 0.0082788234   0.17714794 
+   11000    4.6900383     1.575362    3.1146763  -0.15443691    1.0503534    1.1687589   0.97674452   -1.2465374            1    1.2763968    1.7873892    1.8019634   0.23983793 -0.010702904  -0.20179731 -0.096118554   0.95843071    1.5177453    1.5449364  -0.18738955 -0.009825193  -0.18665807 -0.096270131    1.0942561    1.1405715   0.19596583  0.066666667    1.8553121          0.2 0.0097982916    20.411722    2.5081393    34.409894 -0.0022450814 -0.076522262 0.0064228237   0.14091622 -0.0022450814 -0.076522262 0.0064228237   0.14091622 
+   12000    5.3923061    2.2889078    3.1033983  -0.15605501    1.5261013    1.6895256     1.424519   -1.2465374            1    1.4699767    1.8461765    1.8204981   0.74325543  0.018186988  -0.13783978  0.023905748    1.0079907    1.5725932    1.5652443  -0.11386541  0.013518535  -0.11309487  0.023949574    1.2043361    1.2736313   0.30820301  0.066666667    1.6095192          0.2  0.015410151    12.978458    2.4754703    34.409894 -0.00075158893  -0.11081128 -0.0065094053   0.12971218 -0.00075158893  -0.11081128 -0.0065094053   0.12971218 
+   13000    5.7063443    2.3172507    3.3890935  -0.20006759    1.5449986    2.4518128   0.98013641   -1.2465374            1    3.1955414    3.4288487    3.4115176    2.7462579  0.013037239  -0.02293726 -0.029661945    2.7278348    2.9802923    2.9847403    2.2184718 0.0036712789  -0.04912656 -0.034225183    3.0127681     2.910608    1.0425104  0.066666667    1.2788908          0.2  0.052125518    3.8368923    2.5110841    34.409894  0.030979143   -1.3366018 -0.037591345   0.82974916  0.032300035   -1.3327559 -0.037699502   0.82864641 
+   14000    5.3735697    1.9387115    3.4348581  -0.11253265    1.2926122    1.8048285   0.97362108   -1.2465374            1     1.254473    1.7701926    1.7866839   0.20654266  0.011466383   0.16248394 -0.016685817   0.86316958    1.4243926    1.4666469  -0.30153075 0.0098106169   0.14971764 -0.016482957    1.0729147    1.0447279   0.36500429  0.066666667     1.484797          0.2  0.018250214    10.958775    2.5130374    34.409894 -0.0045700242  -0.10829609 0.0025286835    0.1393292 -0.0045700242  -0.10829609 0.0023575168   0.13912791 
+   15000    5.0535767    1.6363279    3.4172488  -0.10660931    1.0910016    1.5678345    0.7940267   -1.2465374            1    1.2554759    1.8141939    1.7937785   0.15845519 -0.020773744  0.013892144 0.0041320224   0.92520458    1.4806858    1.4659528  -0.17102486 -0.012277714  0.017233982 0.0031812279    1.1074079    1.0732726    0.2875845  0.066666667    1.6589309          0.2  0.014379225    13.908955    2.4812582    34.409894 -0.0065895552  -0.11092711 0.00065923276   0.14962276 -0.0065895552  -0.11092711 0.00066116118    0.1495645 
+   16000    5.1354674    1.7366378    3.3988296  -0.10518135     1.157882    1.6257836   0.86648463   -1.2465374            1    1.2893764    1.8502792    1.8247802   0.19306986 -0.0086201257  0.030060224 -0.0093655167   0.93885888    1.5212016    1.5120778  -0.21670274 -0.0059562435  0.033803154 -0.0061930802    1.1277966    1.1004387   0.32552849  0.066666667    1.5853208          0.2  0.016276424    12.287711    2.4858762    34.409894 0.0068961942  -0.11894966 -0.011002108   0.13240163 0.0068961942  -0.11894966 -0.011002108   0.13240163 
+   17000    5.5494612    2.1582154    3.3912458  -0.14492024    1.4389637    2.0358683    1.0672199   -1.2465374            1    1.5537064    1.9927122    1.9596501   0.70875678 0.0088918072 0.0020371647 0.0097252691    1.1180989    1.6398042    1.6216561  0.092836551  0.005266585  0.031743824 0.00018122529     1.354694    1.3171113   0.58275502  0.066666667    1.3613412          0.2  0.029137751    6.8639477    2.4872982    34.409894 -0.011123825   -0.2446758 0.0014758569   0.21598475 -0.011123825   -0.2446758 0.0014758569   0.21598475 
+   18000    5.4275487    1.9492445    3.4783042  -0.12627149     1.299635    1.8796251   0.93840811   -1.2465374            1    1.3893613    1.9110562    1.9057307   0.35129696  0.015576518 -0.070398413 -0.061708831    0.9959319    1.5439851    1.5671328   -0.1233222  0.011092429 -0.080977887 -0.064855756    1.2143694    1.1709238   0.62829603  0.066666667    1.3879201          0.2  0.031414801    6.3664258    2.4883752    34.409894  0.007286503  -0.17473963 -0.002136795   0.17939355 0.0055177121  -0.17247912 -0.002136795   0.17939355 
+   19000    5.1124825    1.6857414    3.4267412 -0.099579664    1.1239474     1.661295   0.78926519   -1.2465374            1    1.2779342    1.8701255    1.8185836   0.14509351   0.01441653  0.099693037 -0.011482915   0.93768946    1.5329474    1.4802042  -0.20008319   0.01598317  0.096773895 -0.0080965003    1.1307541    1.0848696    0.4185925  0.066666667    1.4652572          0.2  0.020929625    9.5558329    2.5149835    34.409894  0.007400428  -0.12556019 -0.0073184972    0.1476639  0.007400428  -0.12556019 -0.0073184972    0.1476639 
+   20000    5.1188117    1.7144721    3.4043396  -0.11337513    1.1431033    1.6542106   0.82477742   -1.2465374            1    1.2708335    1.8350335    1.8165809   0.16088592 -0.014231827  0.062679689  0.023343346   0.92478978    1.4935393    1.4864109  -0.20558091 -0.011816195  0.068409867  0.018593722    1.1170311    1.0785921   0.44628341  0.066666667    1.4821767          0.2  0.022314171    8.9629144    2.5013471    34.409894 0.0012035019 -0.099042161  0.019746108   0.14187314 0.0012035019 -0.099042161  0.019746108   0.14187314 
+   21000    5.2493617    1.8874971    3.3618647  -0.15296868    1.2584656    1.9219305    0.8452099   -1.2465374            1    1.6990919    2.1552913     2.157634   0.78435026 -0.010359468  -0.01842136 -0.0015847064    1.3181254    1.7916169    1.7953538   0.36740537 -0.0081967508 -0.017798301 0.0010205489    1.5414794    1.4757379   0.71633651  0.066666667    1.3976058          0.2  0.035816825    5.5839678    2.4945788    34.409894  0.024441061  -0.38452564 -0.012294264   0.33873118  0.024441061  -0.38452564 -0.012294264   0.33873118 
+   22000    5.1121634    1.7478473    3.3643162  -0.12656606    1.1653558    1.7108403   0.82560975   -1.2465374            1    1.2531412    1.8227278    1.8445007  0.092195199 0.0062757901  -0.17347572  0.032179074   0.90036121    1.4836551    1.4991523  -0.28172381 -0.0047402403  -0.17710554  0.030568398    1.0991837    1.0543187   0.60057182  0.066666667    1.4136178          0.2  0.030028591    6.6603191    2.5036625    34.409894  0.021322364  -0.18581327 0.0011751532   0.15427719  0.021322364  -0.18581327 0.0011751532   0.15427719 
+   23000    4.9607745    1.6039394     3.356835  -0.12606521     1.069407    1.5498414   0.77018385   -1.2465374            1    1.3640001    1.9136196    1.8838024   0.29457814 0.00013437888  -0.13690353  0.042909189    1.0402659    1.5832595     1.568014 -0.030475583 0.0024637013  -0.13481809  0.047597422    1.2203782    1.1838878   0.49558734  0.066666667    1.4347147          0.2  0.024779367    8.0712312    2.4791492    34.409894 -0.0021174694  -0.15800167 0.0048866363   0.18014572 -0.0021174694  -0.15800167 0.0048866363   0.18014572 
+   24000    4.9954569    1.6664137    3.3290433  -0.14095313    1.1110609    1.6294364   0.78819994   -1.2465374            1    1.2403872    1.8170035    1.8113013  0.092856719 -0.0096026159  0.063998374  0.022196248   0.90404348    1.4934558    1.4875249  -0.26885034 -0.0078649257  0.072398516  0.028832726    1.0934057    1.0510249    0.5897838  0.066666667    1.4378232          0.2   0.02948919    6.7821463    2.4862961    34.409894  0.002916365  -0.17281701 -0.0040591894   0.21317032 0.0029090474  -0.17274411 -0.0040591894   0.21317032 
+   25000    5.0124284    1.7036135    3.3088149  -0.15570989    1.1358635    1.7028527   0.78271048   -1.2465374            1    1.7119038    2.1928239    2.2045529   0.73833446 -0.022731376 -0.036912352 -0.035865245    1.3680518    1.8495458    1.8667035   0.38790598 -0.020097251 -0.037235832   -0.0341579     1.565946    1.5140096   0.70964601  0.066666667    1.4124258          0.2  0.035482301    5.6366131    2.5046653    34.409894 -0.0065345147  -0.22290418 -0.027369539   0.24329469 -0.0065345147  -0.22290418 -0.027369539   0.24329469 
+   26000    4.8954223    1.6040476    3.2913747  -0.13806176    1.0694791    1.5382797   0.77750613   -1.2465374            1    1.4332238    1.9742522    1.9542441   0.37117516 -0.006874207  0.019529899  0.032685254    1.1094679    1.6553556    1.6376978  0.035350258 -0.00025974163  0.015811248  0.030912892    1.2882365    1.2544552   0.57912435  0.066666667    1.4801032          0.2  0.028956218    6.9069794     2.509371    34.409894 -0.0026877984   -0.1679392 0.0027665467   0.15381374 -0.0026877984   -0.1679392 0.0027665467   0.15381374 
+   27000    4.8503422    1.5861823    3.2641598  -0.14596968    1.0575677    1.5190107   0.77017792   -1.2465374            1    1.3813406    1.9095462    1.9309701   0.30350564 0.0045947514  0.013025774 -0.060055022    1.0611906    1.5944706     1.612372 -0.023270901 0.0033309212  0.017055178 -0.057637062    1.2377199    1.2048113   0.58652394  0.066666667    1.5058768          0.2  0.029326197     6.819841    2.4891972    34.409894 0.0032657554  -0.18901528 -0.0025055543   0.14644367 0.0032657554  -0.18901528 -0.0025055543   0.14644367 
+   28000    4.8592265    1.6169542    3.2422723  -0.16976643    1.0780844    1.5516021    0.7831733   -1.2465374            1    1.4940859    2.0000467    2.0122964   0.46991471 -0.0020662928  -0.14981312 -0.028385864     1.167725    1.6701577    1.6937106   0.13930656 -0.0031504576  -0.15005427 -0.033561646    1.3480418    1.3137691    0.6908218  0.066666667     1.528597          0.2   0.03454109    5.7902052    2.5161927    34.409894 0.0016600602  -0.24962291 -0.013642266   0.24523969 0.0016600602  -0.24962291 -0.013642266   0.24523969 
+   29000    4.7979597    1.5636215    3.2343383  -0.15244456    1.0425255    1.4709206   0.77572874   -1.2465374            1    1.2666838    1.8365753    1.8502206   0.11325536  0.016445781  0.025396707  0.008204997   0.95108732    1.5182054    1.5410299   -0.2059733  0.016779389   0.02107915  0.011749523    1.1220279    1.0957432   0.63813889  0.066666667    1.5616385          0.2  0.031906945    6.2682279    2.4951009    34.409894 -0.0094851591  -0.19542363  0.023423709   0.21941094 -0.0095415571  -0.19535163  0.023423709   0.21941094 
+   30000    4.7549555    1.5330664    3.2218892  -0.15446559    1.0221533    1.4233291   0.77231607   -1.2465374            1    1.3435558    1.9202324    1.8952509   0.21518401 -0.0063731589  0.080527752 -0.068670991    1.0341265    1.6035601    1.5926903 -0.093871102 -0.0021922997  0.082319703 -0.069814095    1.1995363    1.1781459   0.61113641  0.066666667     1.587708          0.2   0.03055682    6.5451836    2.4879086    34.409894 -0.00052998142  -0.18552654 -0.0085964255   0.17418506 -0.00084254971  -0.18499956 -0.0085964255   0.17418506 
+   31000    4.7275273     1.533169    3.1943583  -0.17365015    1.0222217    1.4562797   0.75189231   -1.2465374            1    1.4483759    1.9942266    1.9829203   0.36798064 0.0029811065  -0.02480342 -0.0090259095    1.1389258    1.6860584    1.6769825   0.05373652 0.0051907376 -0.022440655 -0.0055618181     1.308165    1.2791367   0.67100177  0.066666667    1.5742623          0.2  0.033550088    5.9612362    2.4905286    34.409894 -0.001879225  -0.21780645  -0.00500852   0.24965333 -0.001879225  -0.21780645  -0.00500852   0.24965333 
+   32000    4.7059338    1.5177786    3.1881553  -0.16182954    1.0119603    1.3997941   0.77043619   -1.2465374            1    1.3703369    1.8931077     1.907347   0.31055588  0.022610756 -0.087273273 -0.056831304    1.0639932    1.5926015    1.6027417 -0.0033636679  0.019961418 -0.084551867 -0.054078389     1.226668    1.2076621   0.65754682  0.066666667    1.5993332          0.2  0.032877341     6.083217     2.487655    34.409894 -0.001294788  -0.23430662 0.0046901621    0.2114959 -0.001294788  -0.23430662 0.0046901621    0.2114959 
+   33000    4.6650486     1.478491    3.1865576  -0.16102759   0.98576578    1.3524866   0.75739482   -1.2465374            1    1.3213862    1.8622272    1.9082211   0.19371015  0.010441061  0.098363078 0.0030645468    1.0229722    1.5621951    1.6122018  -0.10548032  0.012673334   0.10848538 0.0031858994    1.1801492    1.1642092   0.63066321  0.066666667     1.634354          0.2   0.03153316    6.3425295    2.5233564    34.409894 -0.0075228522  -0.16401687 -0.020674877   0.15838165 -0.0075228522  -0.16401687 -0.020674877   0.15838165 
+   34000     4.673774    1.4994147    3.1743593  -0.16857529   0.99971642    1.3770553   0.76473061   -1.2465374            1    1.4612068    1.9508033    2.0042863   0.42853084 -0.0013599969 -0.050763061 -0.028876827    1.1585696    1.6527353    1.6985178   0.12445583 0.00061989023 -0.049053532 -0.029798265    1.3186018    1.3011746   0.66103469  0.066666667     1.634225          0.2  0.033051735    6.0511196    2.4936731    34.409894 -0.0082753023  -0.23580837 -0.0088683326   0.17913983 -0.0082753023  -0.23580837 -0.0088683326   0.17913983 
+   35000    4.6840481     1.512358    3.1716901  -0.17651638    1.0083462    1.3595113   0.78967352   -1.2465374            1    1.3429495    1.9111778    1.9013762   0.21629465 -0.015255157  -0.03737171 -0.048946295       1.0377     1.600139    1.5971275  -0.08416669 -0.016002444 -0.043606465 -0.051118818    1.1956933    1.1849562   0.66940889  0.066666667    1.6457502          0.2  0.033470445    5.9754211    2.5034539    34.409894 -0.0063548016  -0.16344844  0.002044042   0.18753385 -0.0063548016  -0.16344844  0.002044042   0.18753385 
+   36000    4.6378149    1.4773213    3.1604936  -0.17465382   0.98498589     1.325835   0.77273813   -1.2465374            1    1.4551312     1.950732    2.0030972   0.41156445 0.0089476209   -0.1085321  0.045403526    1.1569533    1.6528577    1.7049919   0.11301041  0.011721286  -0.10746548  0.045844992     1.311033    1.3010515   0.64798036  0.066666667    1.6697193          0.2  0.032399018    6.1730266    2.4971589    34.409894 0.0040174757  -0.15475146   0.01598993   0.17510939 0.0040174757  -0.15475146   0.01598993   0.17510939 
+   37000    4.5986503    1.4730742    3.1255762  -0.19013219    0.9821542    1.3394005   0.75968713   -1.2465374            1    1.3749321    1.9264434    1.9140565   0.28429636 0.0012265274  0.029205229 -0.031277869    1.0776114    1.6222172    1.6199575 -0.0093404992 0.0021544153  0.033014536 -0.031251488    1.2332676    1.2192759   0.66709046  0.066666667    1.6719413          0.2  0.033354523    5.9961882     2.482581    34.409894  0.012714353  -0.17551528 -0.0047734118   0.23525339  0.012714353  -0.17551528 -0.0047734118   0.23525339 
+   38000     4.565266    1.4455789    3.1196871  -0.19321905   0.96382206    1.3065409   0.75040537   -1.2465374            1    1.3624599    1.8576342    1.9407728   0.28897254  0.024189639   0.01149136  0.026497206    1.0706887    1.5647622    1.6495394 -0.0022353509  0.018949367  0.014073067  0.024607526    1.2225262    1.2106224   0.66593877  0.066666667     1.656752          0.2  0.033296939    6.0065582    2.4787826    34.409894 -0.0099151913  -0.20055063 0.0016662442   0.22048963 -0.0099151913  -0.20055063 0.0016662442   0.22048963 
+   39000    4.5842604    1.4573379    3.1269225  -0.19374728    0.9716622    1.3405659   0.74192839   -1.2465374            1    1.4772013    1.9607472    1.9942687   0.47658791  0.010504115  0.012154354  0.040025886    1.1830567     1.663447    1.7032035   0.18251968   0.01626519   0.01109008  0.044456258    1.3388484    1.3214096   0.67050555  0.066666667     1.666547          0.2  0.033525278    5.9656478    2.4953013    34.409894  0.010139073  -0.19182469 0.0062854959   0.20668809  0.010139073  -0.19182469 0.0062854959   0.20668809 
+   40000    4.5778014     1.466314    3.1114874  -0.18659892   0.97764695    1.3053707   0.77357764   -1.2465374            1    1.3438465    1.8839599    1.9127262   0.23485332 0.0039905917 -0.047557936 0.00030915139    1.0478902    1.5866955    1.6202961 -0.063320892 0.0012110381 -0.046477342 -0.0029297345    1.1995917     1.192145   0.66581134  0.066666667    1.7042089          0.2  0.033290567    6.0077078    2.4763729    34.409894  0.017177798  -0.16426883  0.011101428   0.20052156  0.017177798  -0.16426883  0.011101428   0.20052156 
+   41000    4.5355474    1.4287435    3.1068039  -0.19450047   0.95259727    1.2743523    0.7522434   -1.2465374            1    1.4492438    1.9586595    1.9725832   0.41648862 -0.0060773044 -0.056273957 -0.018185479    1.1608706    1.6657257    1.6861203   0.13076599 -0.0074422138 -0.053396522 -0.015700176    1.3089674     1.301147   0.67213339  0.066666667    1.6839283          0.2   0.03360667    5.9511996    2.4903011    34.409894 -0.00054930324  -0.20169823 -0.0098647122   0.16961551 -0.00054930324  -0.20169823 -0.0098647122   0.16961551 
+   42000    4.5228824    1.4285031    3.0943793  -0.19864371   0.95243699    1.2768178   0.75044667   -1.2465374            1    1.5100974     1.976699    2.0514546   0.50213859 0.0048627975 0.0089030647   0.01355834    1.2217728    1.6861507    1.7670799   0.21208786 0.0050607128 0.0085463702  0.015524467    1.3701561    1.3617141   0.67271257  0.066666667    1.6980298          0.2  0.033635628    5.9460759    2.4850095    34.409894 0.0037012482  -0.18828903 -0.0047025026   0.17916391 0.0037012482  -0.18828903 -0.0047025026   0.17916391 
+   43000    4.5645688    1.4403403    3.1242285  -0.19122998   0.96032926    1.2750772   0.76434357   -1.2465374            1    1.5384389    2.0111369    2.0411158   0.56306409 -0.0070247908 -0.064792988  0.038601555    1.2477252    1.7213936    1.7495395   0.27224237 -0.0059614764 -0.065711285  0.035977091    1.3959061    1.3902579   0.66928727  0.066666667    1.7075089          0.2  0.033464363    5.9765069      2.47089    34.409894  0.017065097  -0.21931022  0.013096259   0.17396463  0.017065097  -0.21931022  0.013096259   0.17396463 
+   44000    4.5616879     1.438327    3.1233609  -0.18463874   0.95898696    1.2572097   0.77329956   -1.2465374            1     1.293359    1.8339715    1.8635649   0.18254058 0.0019751123  -0.14821671  0.036622933    1.0030516    1.5395325    1.5739578  -0.10433546 -0.0032898388  -0.14364307  0.036131254    1.1491561    1.1472545   0.67438064  0.066666667    1.6883141          0.2  0.033719032    5.9313684    2.4931403    34.409894 0.0091063815  -0.19505568 -0.013021402   0.20132293 0.0091063815  -0.19505568 -0.013021402   0.20132293 
+   45000    4.5094408    1.4244065    3.0850342   -0.1976178   0.94970565    1.2449407    0.7658786   -1.2465374            1    1.2522253     1.793906    1.8340211   0.12874868  -0.00195283 -0.023664722 -0.0065586493   0.96472752    1.5052444    1.5500691  -0.16113104 -0.0017598166 -0.026699503 -0.0077036349    1.1094062    1.1075465   0.66116283  0.066666667    1.7043377          0.2  0.033058141    6.0499469    2.4826211    34.409894   0.01215257  -0.17553843 -0.0076299238   0.17200398   0.01215257  -0.17553843 -0.0076299238   0.17200398 
+   46000    4.5055155    1.4195531    3.0859624    -0.201494   0.94646967    1.2409982   0.76308234   -1.2465374            1    1.3417034    1.8606299    1.8938674   0.27061289 -0.00096766698   0.01923753 -0.040507338    1.0551852    1.5711962    1.6104618  -0.01610237 -0.003487364  0.022433619 -0.039928445    1.1994058    1.1974828   0.67398597  0.066666667    1.7119238          0.2  0.033699299    5.9348416    2.4893586    34.409894  0.010296454  -0.19002948 0.0079387436   0.17691623  0.010296454  -0.19002948 0.0079387436   0.17691623 
+   47000    4.4977426     1.418713    3.0790295  -0.19779277   0.94590958    1.2338436   0.76663191   -1.2465374            1    1.3295299    1.8759694    1.8844329   0.22818733 -0.0078718733  0.037043252 0.0091443587    1.0431813    1.5819429    1.6028886 -0.055287621 -0.0088116206  0.036439972  0.010125777    1.1865704    1.1861408   0.68456177  0.066666667    1.7156322          0.2  0.034228089    5.8431542    2.4927243    34.409894 0.0078027314  -0.19708665 -0.0051626522   0.17694469 0.0078027314  -0.19708665 -0.0051626522   0.17694469 
+   48000    4.4753956    1.3922499    3.0831456  -0.19852697   0.92826563    1.2008897   0.75852608   -1.2465374            1    1.3546209    1.8558875    1.9066244   0.30135076 -0.0050124368 -0.025001344 -0.021602778    1.0736135    1.5738236    1.6328758  0.014141167 -0.0034824564 -0.027310569 -0.021999375    1.2131729    1.2150615   0.65907779  0.066666667    1.7143689          0.2  0.032953889    6.0690864    2.4725729    34.409894 0.0096842249  -0.18994212 0.0074816984   0.18090956 0.0096842249  -0.18994212 0.0074816984   0.18090956 
+   49000    4.4806571    1.4023249    3.0783322  -0.18839912   0.93498296    1.2177607   0.75891679   -1.2465374            1    1.4061515    1.9028494    1.9545301   0.36107486 -0.0082926958 -0.0028950196    -0.040567    1.1231106    1.6226465    1.6743063  0.072379025 -0.0090733919 -0.0078771512 -0.042966863    1.2646307    1.2646314   0.66413634  0.066666667    1.7261678          0.2  0.033206817    6.0228597    2.4814324    34.409894 0.0028937318  -0.20244771 -0.0045570663   0.16200022 0.0028937318  -0.20244771 -0.0045570663   0.16200022 
+   50000    4.4596122    1.4102022      3.04941  -0.19118875   0.94023507    1.2418802   0.75241162   -1.2465374            1    1.4436523    1.9431148    2.0062853   0.38155686  0.022388064  0.045925694  0.071024008    1.1590215    1.6574112    1.7204062  0.099247239  0.018449762  0.049526814  0.071124969    1.3033446    1.2993293   0.67993567  0.066666667     1.749929          0.2  0.033996784    5.8829095     2.467002    34.409894 -0.0021163532  -0.24822676 0.0078917603   0.18187261 -0.0021126094   -0.2481111 0.0079166155   0.18154424 
+Loop time of 69.5946 on 1 procs for 40000 steps with 9376 atoms
+
+Performance: 248295.250 tau/day, 574.758 timesteps/s
+99.3% CPU use with 1 MPI tasks x 1 OpenMP threads
+
+MPI task timing breakdown:
+Section |  min time  |  avg time  |  max time  |%varavg| %total
+---------------------------------------------------------------
+Pair    | 5.9377     | 5.9377     | 5.9377     |   0.0 |  8.53
+Bond    | 15.083     | 15.083     | 15.083     |   0.0 | 21.67
+Neigh   | 22.75      | 22.75      | 22.75      |   0.0 | 32.69
+Comm    | 1.3082     | 1.3082     | 1.3082     |   0.0 |  1.88
+Output  | 0.17242    | 0.17242    | 0.17242    |   0.0 |  0.25
+Modify  | 23.012     | 23.012     | 23.012     |   0.0 | 33.07
+Other   |            | 1.331      |            |       |  1.91
+
+Nlocal:    9376 ave 9376 max 9376 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+Nghost:    1743 ave 1743 max 1743 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+Neighs:    12857 ave 12857 max 12857 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+
+Total # of neighbors = 12857
+Ave neighs/atom = 1.37127
+Ave special neighs/atom = 6.94113
+Neighbor list builds = 6599
+Dangerous builds = 0
+
+#--- Write Restart File ---#
+
+write_restart  ecs.rst
+WARNING: compute stress/mop/profile does not account for bond potentials (src/USER-MISC/compute_stress_mop_profile.cpp:193)
+WARNING: compute stress/mop/profile does not account for bond potentials (src/USER-MISC/compute_stress_mop_profile.cpp:193)
+WARNING: compute stress/mop/profile does not account for bond potentials (src/USER-MISC/compute_stress_mop_profile.cpp:193)
+shell          python post.py
+WARNING: Shell command returned with non-zero status (sr

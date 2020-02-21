@@ -1,0 +1,46 @@
+#--- Brush Variables---#
+variable      f      equal  1                  # System Size Scaling Factor
+variable      M      equal  $(v_f * 60)        # The number of polymer chains on each brush
+variable      N      string 30                 # The number of beads per chain
+variable      L      equal  30
+variable      xhi    equal  $(sqrt(v_f) * 30)  # The width of the polymer Brush
+variable      yhi    equal  $(sqrt(v_f) * 30)   # The length of the polymer Brush
+variable      wthick equal  3                  # The thickness of the walls wthick=1,2,3,4 gives 2,3,4,6 layers respectively
+
+#--- Simulation Variables ---#
+variable       Temp      index 1               # The Temperature of the Thermostats
+variable       Tstep     equal 0.005           # Timestep in Tau (default = 0.005)
+variable       Nequil    equal 300000          # Number of timesteps to equilibrate
+variable       Ncomp     equal 700000          # Number of timesteps to compress - until no more oscillation of D
+variable       Nshear    equal 4000000         # Number of timesteps to shear
+variable       Nthermo   equal 1000            # Number of timesteps between thermo data prints
+variable       Ndump_e   equal 10000
+variable       Ndump_c   equal 10000           # Number of timesteps per dump file (compression)
+variable       Ndump_s   equal 10000           # Number of timesteps per dump file (shear)
+variable       Vwalli    index 0.01 0.5 1 1.5 2 5 10   # Relative wall Velocities
+variable       Pcomp     index 1 # 0.5 2 0.05 4 8                               # Compressive Pressures applied to top wall
+variable       Vscale    equal 1e-1
+
+include        MDPBB.in
+print        "Created a Polymer Brush Bilayer with Surface Coverage = $(v_M/(lx*ly))"
+
+label          sim
+
+include        ecs.in
+shell          python post.py
+shell          mkdir $(v_Vwalli)_V
+shell          cp -f *.csv $(v_Vwalli)_V
+shell          cp -f *.jpg $(v_Vwalli)_V
+shell          cp -f log.lammps $(v_Vwalli)_V
+shell          cp -f fc_ave.dump $(v_Vwalli)_V
+shell          cp -f ecs.rst $(v_Vwalli)_V
+shell          cp -f eq.xyz $(v_Vwalli)_V
+shell          cp -f cp.xyz $(v_Vwalli)_V
+shell          cp -f sh.xyz $(v_Vwalli)_V
+
+shell          pwd
+
+log           log.lammps
+next          Vwalli
+jump          main.in sim
+clear

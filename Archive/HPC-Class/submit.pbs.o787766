@@ -1,0 +1,15 @@
+Hello from r1i0n6 on Fri Nov 29 12:27:30 2019.
+I'm job 787766.pbs submitted by maa4617 from 
+/rdsgpfs/general/user/maa4617/home/PhD-Sims/HPC-Class 
+and executed in 
+/rds/general/ephemeral/tmpdir/pbs.787766.pbs.
+
+============================================
+
+        Job resource usage summary 
+
+                 Memory (GB)    NCPUs
+ Requested  :         2             1
+ Used       :         0 (peak)   0.00 (ave)
+
+============================================

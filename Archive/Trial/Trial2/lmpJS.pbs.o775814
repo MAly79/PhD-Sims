@@ -1,0 +1,33 @@
+pbsexec: requested walltime 86400 seconds
+pbsexec: grace period 1200 seconds
+pbsexec: terminating after 85200 seconds
+pbsexec: mpiexec lmp_mpi -l log.lammps -in main.in
+# mpiexec: No RDMA network found -- using sockets+shared memory (I_MPI_DEVICE=ssm)
+# mpiexec: full path to program is /apps/lammps/30Jul16/bin/lmp_mpi
+# mpiexec: program arguments are: -l log.lammps -in main.in
+# mpiexec: 32 ranks allocated via PBS select
+# mpiexec: 1 OpenMP threads / rank allocated by PBS select
+# mpiexec: Job has exclusive use of the allocated nodes. Enabling process-pinning
+# mpiexec: machinefile configured as:
+cx1-101-1-3.cx1.hpc.ic.ac.uk:32
+#
+# mpiexec: Checking all nodes are ONLINE:
+# mpiexec: All nodes appear ONLINE
+# mpiexec: launch started at Wed 27 Nov 13:01:50 GMT 2019
+# mpiexec: launching program...
+# /apps/lammps/30Jul16/bin/lmp_mpi -l log.lammps -in main.in
+(cx1-101-1-3.cx1.hpc.ic.ac.uk:0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31)
+LAMMPS (30 Jul 2016)
+This is a LAMMPS Test
+Total wall time: 0:00:00
+# mpiexec: finished at Wed 27 Nov 13:01:52 GMT 2019
+
+============================================
+
+        Job resource usage summary 
+
+                 Memory (GB)    NCPUs
+ Requested  :        60            48
+ Used       :         0 (peak)   2.00 (ave)
+
+============================================

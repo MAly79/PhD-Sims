@@ -1,0 +1,4 @@
+cp: omitting directory ‘/rdsgpfs/general/user/maa4617/home/PhD-Sims/Trial/Trial2/Results’
+46.79user 9.38system 0:03.96elapsed 1418%CPU (0avgtext+0avgdata 22028maxresident)k
+42872inputs+16outputs (580major+238487minor)pagefaults 0swaps
+mkdir: cannot create directory ‘/rdsgpfs/general/user/maa4617/home/PhD-Sims/Trial/Trial2/Results’: File exists

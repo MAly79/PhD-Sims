@@ -1,0 +1,43 @@
+# FCC Wall minimisation
+
+dimension     3
+boundary      p p p
+units         lj
+atom_style    bond
+
+
+region        sbox block 0 30 0 40 0 30
+create_box    1 sbox bond/types 1 extra/bond/per/atom 12
+
+pair_style	  lj/cut 1.122462         # LJ potential with rc=2^1/6
+pair_coeff	  * * 1.0 1.0
+
+bond_style    harmonic
+bond_coeff    1 300.0 0.5 #$(1.5874 * sqrt(2)/2)
+
+region        bwall block 0 30 0 40 0 10
+region        twall block 0 30 0 40 20 30
+lattice       fcc 1
+create_atoms  1 region bwall
+create_atoms  1 region twall
+group         bwall region bwall
+group         twall region twall
+
+mass 1 1.0
+
+#neigh_modify exclude type 1 1
+create_bonds  many bwall bwall 1 0.5 1.2
+create_bonds  many twall twall 1 0.5 1.2
+
+
+dump 1 all custom 100 dump.random.bin id x y z vx vy vz
+dump 2 all image 500 image.*.jpg type type
+timestep 0.010
+minimize 0.0 1.0e-8 10000 100000
+
+thermo 1000
+
+fix nve_all all nve
+fix lang_wall all langevin 1 1 0.01 87239 zero yes
+
+run 10000
